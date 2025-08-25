@@ -1,0 +1,47 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "5.82.2"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# Budget resource stays in main
+resource "aws_budgets_budget" "budget" {
+  name         = "budget"
+  budget_type  = "COST"
+  limit_amount = "100"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+}
+
+module "networking" {
+  source       = "./modules/networking"
+  project_name = var.project_name
+}
+
+module "storage" {
+  source       = "./modules/storage"
+  project_name = var.project_name
+  data_instance_class = var.data_instance_class
+  db_subnet_group_id = var.db_subnet_group_id
+  vpc_security_group_ids = var.vpc_security_group_ids
+  data_db_username = var.data_db_username
+  data_db_password = var.data_db_password\
+
+  dependepends_on = [ module.networking ]
+}
+
+# module "trigger" {
+#   source       = "./modules/triggers"
+#   aws_region   = var.aws_region
+#   s3_bucket_name = module.storage.data_bucket_name
+#   step_function_arn = module.step_function.step_function_arn
+
+#   depends_on = [ module.networking, module.step_function ]
+# }
