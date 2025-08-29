@@ -21,20 +21,21 @@ resource "aws_budgets_budget" "budget" {
 }
 
 module "networking" {
-  source       = "./modules/networking"
+  source  = "./modules/networking"
   project_name = var.project_name
+  ip_address = var.ip_address
 }
 
 module "storage" {
-  source       = "./modules/storage"
+  source  = "./modules/storage"
   project_name = var.project_name
   data_instance_class = var.data_instance_class
-  db_subnet_group_id = var.db_subnet_group_id
-  vpc_security_group_ids = var.vpc_security_group_ids
+  db_subnet_group_id = module.networking.db_subnet_group_id
+  rds_security_group_id = module.networking.rds_security_group_id
   data_db_username = var.data_db_username
-  data_db_password = var.data_db_password\
+  data_db_password = var.data_db_password
 
-  dependepends_on = [ module.networking ]
+  depends_on = [ module.networking ]
 }
 
 # module "trigger" {
