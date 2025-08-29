@@ -23,19 +23,11 @@ resource "aws_subnet" "private_subnet_b" {
   tags = { Name = "${var.project_name}-private-subnet-b" }
 }
 
-resource "aws_subnet" "private_subnet_c" {
-  vpc_id            = aws_vpc.main_vpc.id
-  cidr_block        = "10.0.3.0/24"
-  availability_zone = "eu-central-1c"
-  tags = { Name = "${var.project_name}-private-subnet-c" }
-}
-
 resource "aws_db_subnet_group" "db_subnet_group" {
   name       = "${var.project_name}-db-subnet-group"
   subnet_ids = [
     aws_subnet.private_subnet_a.id,
-    aws_subnet.private_subnet_b.id,
-    aws_subnet.private_subnet_c.id,
+    aws_subnet.private_subnet_b.id
   ]
   tags = { Name = "${var.project_name} DB subnet group" }
 }
