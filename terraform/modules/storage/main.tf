@@ -88,7 +88,7 @@ resource "aws_db_instance" "project_rds" {
   final_snapshot_identifier = "${var.project_name}-final-snapshot-${random_id.bucket_suffix.hex}"
   backup_retention_period = 7
   backup_window           = "03:00-04:00"
-  deletion_protection     = true
+  deletion_protection     = false
   multi_az                = true
   db_subnet_group_name    = var.db_subnet_group_id
   vpc_security_group_ids  = [var.rds_security_group_id]
