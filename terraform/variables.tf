@@ -33,3 +33,9 @@ variable "ip_address" {
   type        = string
   sensitive   = true
 }
+
+variable "aws_account_id" {
+  description = "The AWS account ID"
+  type        = string
+  sensitive   = true
+}

@@ -38,6 +38,35 @@ module "storage" {
   depends_on = [ module.networking ]
 }
 
+module "secretsmanager" {
+  source  = "./modules/secretsmanager"
+  db_username = var.data_db_username
+  db_password = var.data_db_password
+  db_host = module.storage.db_host
+  db_port = module.storage.db_port
+  db_name = module.storage.db_name
+
+  depends_on = [ module.storage ]
+}
+
+module "compute" {
+  source = "./modules/compute"
+  project_name = var.project_name
+  aws_region = var.aws_region
+  aws_account_id = var.aws_account_id
+  scripts_bucket = module.storage.scripts_bucket
+  db_host = module.storage.db_host
+  db_port = module.storage.db_port
+  db_name = module.storage.db_name
+  # use a real private subnet id exported by the networking module
+  vpc_subnet_id = module.networking.private_subnet_a_id
+  glue_security_group_id = module.networking.glue_security_group_id
+  db_secret_id = module.secretsmanager.db_secret_id
+  availability_zone = module.networking.subnet_a_availability_zone
+
+  depends_on = [ module.storage, module.secretsmanager, module.networking ]
+}
+
 # module "trigger" {
 #   source       = "./modules/triggers"
 #   aws_region   = var.aws_region
