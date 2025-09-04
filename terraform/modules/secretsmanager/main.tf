@@ -1,6 +1,7 @@
 resource "aws_secretsmanager_secret" "db_secret" {
-  name        = "${var.db_name}-credentials"
-  description = "Credentials for ${var.db_name}"
+  name                      = "${var.db_name}-credentials"
+  description               = "Credentials for ${var.db_name}"
+  recovery_window_in_days   = 0   # Immediate deletion, no recovery window
   tags = {
     Project = var.db_name
   }
