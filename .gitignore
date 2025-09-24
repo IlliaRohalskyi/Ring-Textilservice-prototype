@@ -137,6 +137,8 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+.last_deploy.log
+*.deploy.log
 .venv
 env/
 venv/

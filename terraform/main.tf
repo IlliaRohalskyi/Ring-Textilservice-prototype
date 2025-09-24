@@ -55,10 +55,10 @@ module "compute" {
   aws_region = var.aws_region
   aws_account_id = var.aws_account_id
   scripts_bucket = module.storage.scripts_bucket
+  data_bucket = module.storage.data_bucket
   db_host = module.storage.db_host
   db_port = module.storage.db_port
   db_name = module.storage.db_name
-  # use a real private subnet id exported by the networking module
   vpc_subnet_id = module.networking.private_subnet_a_id
   glue_security_group_id = module.networking.glue_security_group_id
   db_secret_id = module.secretsmanager.db_secret_id
@@ -67,11 +67,20 @@ module "compute" {
   depends_on = [ module.storage, module.secretsmanager, module.networking ]
 }
 
-# module "trigger" {
-#   source       = "./modules/triggers"
-#   aws_region   = var.aws_region
-#   s3_bucket_name = module.storage.data_bucket_name
-#   step_function_arn = module.step_function.step_function_arn
+module "step_functions" {
+  source       = "./modules/step_functions"
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  glue_job_name = module.compute.glue_job_name
 
-#   depends_on = [ module.networking, module.step_function ]
-# }
+  depends_on = [ module.compute ]
+}
+
+ module "trigger" {
+  source       = "./modules/triggers"
+  aws_region   = var.aws_region
+  s3_bucket_name = module.storage.data_bucket
+  step_function_arn = module.step_functions.step_function_arn
+
+  depends_on = [ module.networking, module.step_functions ]
+}

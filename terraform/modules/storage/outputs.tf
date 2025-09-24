@@ -1,4 +1,4 @@
-output data_bucket_name {
+output data_bucket {
   description = "Name of the data S3 bucket"
   value       = aws_s3_bucket.data_bucket.bucket
 }

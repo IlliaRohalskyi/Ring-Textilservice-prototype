@@ -7,6 +7,15 @@ resource "aws_vpc" "main_vpc" {
   }
 }
 
+# Internet Gateway for public subnets
+resource "aws_internet_gateway" "main_igw" {
+  vpc_id = aws_vpc.main_vpc.id
+  tags = {
+    Name = "${var.project_name}-igw"
+  }
+}
+
+# Private subnets for Glue and other services
 resource "aws_subnet" "private_subnet_a" {
   vpc_id     = aws_vpc.main_vpc.id
   cidr_block = "10.0.1.0/24"
@@ -14,6 +23,7 @@ resource "aws_subnet" "private_subnet_a" {
   tags = {
     Name = "${var.project_name}-private-subnet-a"
   }
+  
 }
 
 resource "aws_subnet" "private_subnet_b" {
@@ -23,13 +33,60 @@ resource "aws_subnet" "private_subnet_b" {
   tags = { Name = "${var.project_name}-private-subnet-b" }
 }
 
+# Public subnets
+resource "aws_subnet" "rds_public_subnet_a" {
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = "10.0.10.0/24"
+  availability_zone       = "eu-central-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "${var.project_name}-rds-public-subnet-a"
+  }
+}
+
+resource "aws_subnet" "rds_public_subnet_b" {
+  vpc_id                  = aws_vpc.main_vpc.id
+  cidr_block              = "10.0.11.0/24"
+  availability_zone       = "eu-central-1b"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "${var.project_name}-rds-public-subnet-b"
+  }
+}
+
+# Route table for public subnets (RDS only)
+resource "aws_route_table" "rds_public_rt" {
+  vpc_id = aws_vpc.main_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main_igw.id
+  }
+
+  tags = {
+    Name = "${var.project_name}-rds-public-route-table"
+  }
+}
+
+# Associate public subnets with route table
+resource "aws_route_table_association" "rds_public_subnet_a_association" {
+  subnet_id      = aws_subnet.rds_public_subnet_a.id
+  route_table_id = aws_route_table.rds_public_rt.id
+}
+
+resource "aws_route_table_association" "rds_public_subnet_b_association" {
+  subnet_id      = aws_subnet.rds_public_subnet_b.id
+  route_table_id = aws_route_table.rds_public_rt.id
+}
+
+# DB subnet group using PUBLIC subnets for RDS
 resource "aws_db_subnet_group" "db_subnet_group" {
   name       = "${var.project_name}-db-subnet-group"
   subnet_ids = [
-    aws_subnet.private_subnet_a.id,
-    aws_subnet.private_subnet_b.id
+    aws_subnet.rds_public_subnet_a.id,
+    aws_subnet.rds_public_subnet_b.id
   ]
-  tags = { Name = "${var.project_name} DB subnet group" }
+  tags = { Name = "${var.project_name}-db-subnet-group" }
 }
 
 # Security Group for RDS
@@ -68,6 +125,10 @@ resource "aws_security_group" "rds_sg" {
   }
 }
 
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.eu-central-1.s3"
+}
+
 resource "aws_security_group" "glue_sg" {
   name        = "${var.project_name}-glue-sg"
   description = "Security group for AWS Glue jobs"
@@ -79,6 +140,14 @@ resource "aws_security_group" "glue_sg" {
     to_port          = 65535
     protocol         = "tcp"
     self             = true
+  }
+
+  ingress {
+    description = "Allow inbound HTTPS from same security group"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    self        = true
   }
 
   egress {
@@ -97,13 +166,29 @@ resource "aws_security_group" "glue_sg" {
     cidr_blocks      = [aws_vpc.main_vpc.cidr_block]
   }
 
-  # Allow access to VPC endpoints for AWS services
+  # Allow outbound traffic
   egress {
-    description = "Allow HTTPS to VPC endpoints"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main_vpc.cidr_block]
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description     = "Allow HTTPS to S3 via Gateway VPC Endpoint"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_prefix_list.s3.id]
+  }
+
+    egress {
+    description     = "Allow HTTPS to VPC endpoints"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.vpc_endpoint_sg.id]
   }
 
   tags = {
@@ -124,16 +209,14 @@ resource "aws_security_group" "vpc_endpoint_sg" {
     protocol    = "tcp"
     cidr_blocks = [aws_vpc.main_vpc.cidr_block]
   }
-
-  tags = {
-    Name = "${var.project_name}-vpc-endpoint-sg"
-  }
 }
 
 # VPC Endpoint for S3 (Gateway endpoint - no security group needed)
 resource "aws_vpc_endpoint" "s3" {
   vpc_id       = aws_vpc.main_vpc.id
   service_name = "com.amazonaws.eu-central-1.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids = [aws_route_table.private_rt.id]
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -143,7 +226,9 @@ resource "aws_vpc_endpoint" "s3" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:ListAllMyBuckets",
+          "s3:GetBucketLocation"
         ]
         Resource = "*"
       }
@@ -179,20 +264,6 @@ resource "aws_route_table_association" "private_subnet_a_association" {
 resource "aws_route_table_association" "private_subnet_b_association" {
   subnet_id      = aws_subnet.private_subnet_b.id
   route_table_id = aws_route_table.private_rt.id
-}
-
-# VPC Endpoint for Secrets Manager
-resource "aws_vpc_endpoint" "secretsmanager" {
-  vpc_id              = aws_vpc.main_vpc.id
-  service_name        = "com.amazonaws.eu-central-1.secretsmanager"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = [aws_subnet.private_subnet_a.id, aws_subnet.private_subnet_b.id]
-  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
-  private_dns_enabled = true
-
-  tags = {
-    Name = "${var.project_name}-secretsmanager-endpoint"
-  }
 }
 
 # VPC Endpoint for CloudWatch Logs

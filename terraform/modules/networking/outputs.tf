@@ -19,3 +19,13 @@ output "subnet_a_availability_zone" {
   description = "Availability zone for subnet A"
   value       = aws_subnet.private_subnet_a.availability_zone
 }
+
+output "rds_public_subnet_a_id" {
+  description = "RDS Public subnet A id"
+  value       = aws_subnet.rds_public_subnet_a.id
+}
+
+output "rds_public_subnet_b_id" {
+  description = "RDS Public subnet B id"
+  value       = aws_subnet.rds_public_subnet_b.id
+}

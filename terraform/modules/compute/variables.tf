@@ -21,6 +21,11 @@ variable "scripts_bucket" {
   description = "S3 bucket name to upload Glue scripts into"
 }
 
+variable "data_bucket" {
+  type        = string
+  description = "S3 bucket name for data storage"
+}
+
 # variable "quicksight_account_id" {
 #   type        = string
 #   description = "QuickSight account id"
@@ -37,6 +42,12 @@ variable "glue_max_capacity" {
   type        = number
   description = "Glue max capacity (DPU equivalent or number for worker-based)"
   default     = 2
+}
+
+variable "glue_worker_type" {
+  type        = string
+  description = "Glue worker type (G.1X, G.2X)"
+  default     = "G.1X"
 }
 
 variable "db_host" {

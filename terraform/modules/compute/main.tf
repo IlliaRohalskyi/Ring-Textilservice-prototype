@@ -82,6 +82,22 @@
 #   }
 # }
 
+# Get all .whl files from the wheels directory
+locals {
+  wheel_files = fileset("${path.module}/../../../wheels", "*.whl")
+}
+
+# Upload each .whl file individually to S3
+resource "aws_s3_object" "wheel_files" {
+  for_each = local.wheel_files
+  
+  bucket = var.scripts_bucket
+  key    = "glue/wheels/${each.value}"
+  source = "${path.module}/../../../wheels/${each.value}"
+  etag   = filemd5("${path.module}/../../../wheels/${each.value}")
+  acl    = "private"
+}
+
 resource "aws_s3_object" "glue_script" {
   bucket = var.scripts_bucket
   key    = "glue/glue_job.py"
@@ -123,7 +139,9 @@ resource "aws_iam_role_policy" "glue_job_minimal_policy" {
         ]
         Resource = [
           "arn:aws:s3:::${var.scripts_bucket}",
-          "arn:aws:s3:::${var.scripts_bucket}/*"
+          "arn:aws:s3:::${var.scripts_bucket}/*",
+          "arn:aws:s3:::${var.data_bucket}",
+          "arn:aws:s3:::${var.data_bucket}/*"
         ]
       },
       {
@@ -207,12 +225,23 @@ resource "aws_glue_job" "data_processing_job" {
     "--TempDir"                          = "s3://${var.scripts_bucket}/glue-temp/"
     "--enable-continuous-cloudwatch-log" = "true"
     "--job-language"                    = "python"
+    "--enable-auto-scaling"               = "true"
+    "--extra-py-files"                   = join(",", [for file in local.wheel_files : "s3://${var.scripts_bucket}/glue/wheels/${file}"])
   }
 
+  number_of_workers = var.glue_max_capacity
+  worker_type = var.glue_worker_type
+
   max_retries  = 1
-  max_capacity = var.glue_max_capacity
   timeout     = 60
   glue_version = "5.0"
 
-  depends_on = [aws_s3_object.glue_script]
+  execution_property {
+    max_concurrent_runs = 10
+  }
+
+  depends_on = [
+    aws_s3_object.glue_script,
+    aws_s3_object.wheel_files
+  ]
 }
