@@ -198,7 +198,7 @@ resource "aws_glue_connection" "db_connection" {
 
   connection_properties = {
     JDBC_CONNECTION_URL = "jdbc:postgresql://${var.db_host}:${var.db_port}/${var.db_name}"
-    SECRET_ID           = var.db_secret_id
+    SECRET_ID           = var.db_secret_arn
   }
 
   physical_connection_requirements {

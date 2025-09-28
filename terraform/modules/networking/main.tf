@@ -79,12 +79,12 @@ resource "aws_route_table_association" "rds_public_subnet_b_association" {
   route_table_id = aws_route_table.rds_public_rt.id
 }
 
-# DB subnet group using PUBLIC subnets for RDS
+# DB subnet group using PRIVATE subnets for RDS
 resource "aws_db_subnet_group" "db_subnet_group" {
   name       = "${var.project_name}-db-subnet-group"
   subnet_ids = [
-    aws_subnet.rds_public_subnet_a.id,
-    aws_subnet.rds_public_subnet_b.id
+    aws_subnet.private_subnet_a.id,
+    aws_subnet.private_subnet_b.id
   ]
   tags = { Name = "${var.project_name}-db-subnet-group" }
 }
@@ -95,12 +95,13 @@ resource "aws_security_group" "rds_sg" {
   description = "Security group for RDS instance"
   vpc_id      = aws_vpc.main_vpc.id
 
+  # Allow access from within VPC (private subnets)
   ingress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = [var.ip_address]
-    description = "Allow PostgreSQL access from your IP (set var.ip_address as CIDR, e.g. 1.2.3.4/32)"
+    cidr_blocks = [aws_vpc.main_vpc.cidr_block]
+    description = "Allow PostgreSQL access from within VPC"
   }
 
   # Allow access from Glue

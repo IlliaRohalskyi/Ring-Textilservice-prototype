@@ -24,11 +24,11 @@ def lambda_handler(event, context):
         secret_response = secrets_client.get_secret_value(SecretId=secret_name)
         db_credentials = json.loads(secret_response['SecretString'])
         
-        # Extract connection parameters (handle both username/user key variations)
+        # Extract connection parameters
         db_host = db_credentials['host']
         db_port = db_credentials.get('port', 5432)
         db_name = db_credentials['dbname']
-        db_user = db_credentials.get('username', db_credentials.get('user', db_credentials.get('USERNAME')))
+        db_user = db_credentials['username']
         db_password = db_credentials['password']
         
         logger.info(f"🔌 Connecting to database {db_name} at {db_host}:{db_port}")

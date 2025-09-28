@@ -170,10 +170,11 @@ print("✅ Table schemas defined")
 # Process each table
 for schema_obj in target_schemas:
     table_name = schema_obj["table_name"]
+    staging_table_name = f"{table_name}_staging"
     schema = schema_obj["schema"] 
     column_mapping = schema_obj["column_mapping"]
     
-    print(f"📊 Processing table: {table_name}")
+    print(f"📊 Processing table: {staging_table_name}")
     
     # Map and cast columns for this table
     selected_cols = []
@@ -213,24 +214,26 @@ for schema_obj in target_schemas:
     df_table = df_table.dropDuplicates()
     
     # Convert Spark DataFrame to Glue DynamicFrame for JDBC operations
-    dynamic_frame = DynamicFrame.fromDF(df_table, glueContext, f"{table_name}_frame")
+    dynamic_frame = DynamicFrame.fromDF(df_table, glueContext, f"{staging_table_name}_frame")
     
-    # Write to PostgreSQL using JDBC connection
-    print(f"🔄 Writing {table_name} to PostgreSQL...")
+    # Write to staging table (will overwrite existing data)
+    print(f"🔄 Writing {df_table.count()} rows to staging table {staging_table_name}...")
     
-    # Use Glue's built-in JDBC sink with upsert capability
     glueContext.write_dynamic_frame.from_jdbc_conf(
         frame=dynamic_frame,
-        catalog_connection="glue-db-connection",  # This matches your Terraform connection name
+        catalog_connection="glue-db-connection",
         connection_options={
-            "dbtable": table_name,
+            "dbtable": staging_table_name,
             "database": "ring_textilservice_data"
         },
-        transformation_ctx=f"write_{table_name}"
+        transformation_ctx=f"write_staging_{table_name}"
     )
     print(f"✅ {table_name} written to database successfully")
 
-print("🎉 All tables processed successfully!")
+print("🎉 All staging tables populated successfully!")
+
+# Note: The upserts from staging to main tables will be handled by Lambda
+print("📡 Lambda function will handle upserts after job completion")
 
 # Commit the job - this is critical for proper error handling!
 job.commit()
