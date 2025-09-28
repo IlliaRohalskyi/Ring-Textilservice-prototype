@@ -112,6 +112,15 @@ resource "aws_security_group" "rds_sg" {
     description     = "Allow PostgreSQL access from Glue"
   }
 
+  # Allow access from Lambda
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_sg.id]
+    description     = "Allow PostgreSQL access from Lambda"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -211,6 +220,44 @@ resource "aws_security_group" "vpc_endpoint_sg" {
   }
 }
 
+# Security group for Lambda functions
+resource "aws_security_group" "lambda_sg" {
+  name        = "${var.project_name}-lambda-sg"
+  description = "Security group for Lambda functions"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  # Allow outbound HTTPS for AWS API calls
+  egress {
+    description = "Allow HTTPS outbound"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow outbound to RDS
+  egress {
+    description     = "Allow outbound to RDS"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    cidr_blocks     = [aws_vpc.main_vpc.cidr_block]
+  }
+
+  # Allow all outbound within VPC
+  egress {
+    description = "Allow all outbound within VPC"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.main_vpc.cidr_block]
+  }
+
+  tags = {
+    Name = "${var.project_name}-lambda-sg"
+  }
+}
+
 # VPC Endpoint for S3 (Gateway endpoint - no security group needed)
 resource "aws_vpc_endpoint" "s3" {
   vpc_id       = aws_vpc.main_vpc.id
@@ -277,5 +324,19 @@ resource "aws_vpc_endpoint" "logs" {
 
   tags = {
     Name = "${var.project_name}-logs-endpoint"
+  }
+}
+
+# VPC Endpoint for Secrets Manager (needed for Lambda to access DB credentials)
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.main_vpc.id
+  service_name        = "com.amazonaws.eu-central-1.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.private_subnet_a.id, aws_subnet.private_subnet_b.id]
+  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${var.project_name}-secretsmanager-endpoint"
   }
 }

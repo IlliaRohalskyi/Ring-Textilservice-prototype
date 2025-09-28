@@ -88,3 +88,23 @@ variable "availability_zone" {
   type        = string
   description = "Availability zone for Glue job"
 }
+
+variable "db_secret_arn" {
+  type        = string
+  description = "ARN of the database secrets in Secrets Manager"
+}
+
+variable "db_secret_name" {
+  type        = string
+  description = "Name of the database secret"
+}
+
+variable "private_subnet_b_id" {
+  type        = string
+  description = "Private subnet B ID for Lambda"
+}
+
+variable "lambda_security_group_id" {
+  type        = string
+  description = "Security group ID for Lambda"
+}

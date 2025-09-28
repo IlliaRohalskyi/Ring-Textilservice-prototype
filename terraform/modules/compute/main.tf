@@ -245,3 +245,124 @@ resource "aws_glue_job" "data_processing_job" {
     aws_s3_object.wheel_files
   ]
 }
+
+# =============================================================================
+# LAMBDA FUNCTION FOR DATABASE SCHEMA DEPLOYMENT
+# =============================================================================
+
+# Lambda Layer for psycopg2
+resource "aws_lambda_layer_version" "psycopg2_layer" {
+  filename         = "${path.module}/../../../src/lambda/layers/psycopg2-layer.zip"
+  layer_name       = "${var.project_name}-psycopg2-layer"
+  description      = "Layer containing psycopg2 for PostgreSQL connections"
+  
+  compatible_runtimes = ["python3.9"]
+  
+  source_code_hash = filebase64sha256("${path.module}/../../../src/lambda/layers/psycopg2-layer.zip")
+}
+
+# Package Lambda function
+data "archive_file" "deploy_schema_lambda" {
+  type        = "zip"
+  source_file = "${path.module}/../../../src/lambda/deploy_schema.py"
+  output_path = "${path.module}/../../../src/lambda/deploy_schema.zip"
+}
+
+# IAM role for Lambda
+resource "aws_iam_role" "deploy_schema_lambda_role" {
+  name = "${var.project_name}-lambda-deploy-schema-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM policy for Lambda
+resource "aws_iam_role_policy" "deploy_schema_lambda_policy" {
+  name = "${var.project_name}-lambda-deploy-schema-policy"
+  role = aws_iam_role.deploy_schema_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:AttachNetworkInterface",
+          "ec2:DetachNetworkInterface"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.db_secret_arn
+      }
+    ]
+  })
+}
+
+# Attach VPC execution role policy
+resource "aws_iam_role_policy_attachment" "deploy_schema_lambda_vpc_execution" {
+  role       = aws_iam_role.deploy_schema_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Lambda function for schema deployment
+resource "aws_lambda_function" "deploy_schema" {  
+  filename         = data.archive_file.deploy_schema_lambda.output_path
+  function_name    = "${var.project_name}-deploy-schema"
+  role            = aws_iam_role.deploy_schema_lambda_role.arn
+  handler         = "deploy_schema.lambda_handler"
+  runtime         = "python3.9"
+  timeout         = 300
+  memory_size     = 256
+  
+  source_code_hash = data.archive_file.deploy_schema_lambda.output_base64sha256
+  
+  layers = [aws_lambda_layer_version.psycopg2_layer.arn]
+  
+  vpc_config {
+    subnet_ids         = [var.vpc_subnet_id, var.private_subnet_b_id]
+    security_group_ids = [var.lambda_security_group_id]
+  }
+  
+  environment {
+    variables = {
+      SECRET_NAME = var.db_secret_name
+    }
+  }
+  
+  tags = {
+    Name = "${var.project_name}-deploy-schema"
+  }
+}
+
+# CloudWatch Log Group for Lambda
+resource "aws_cloudwatch_log_group" "deploy_schema_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.deploy_schema.function_name}"
+  retention_in_days = 14
+}

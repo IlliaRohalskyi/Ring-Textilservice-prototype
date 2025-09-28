@@ -10,6 +10,10 @@ output "glue_security_group_id" {
   value = aws_security_group.glue_sg.id
 }
 
+output "lambda_security_group_id" {
+  value = aws_security_group.lambda_sg.id
+}
+
 output "private_subnet_a_id" {
   description = "Private subnet A id"
   value       = aws_subnet.private_subnet_a.id
@@ -18,6 +22,11 @@ output "private_subnet_a_id" {
 output "subnet_a_availability_zone" {
   description = "Availability zone for subnet A"
   value       = aws_subnet.private_subnet_a.availability_zone
+}
+
+output "private_subnet_b_id" {
+  description = "Private subnet B id"
+  value       = aws_subnet.private_subnet_b.id
 }
 
 output "rds_public_subnet_a_id" {

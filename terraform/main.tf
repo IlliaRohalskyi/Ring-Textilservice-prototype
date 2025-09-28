@@ -63,6 +63,12 @@ module "compute" {
   glue_security_group_id = module.networking.glue_security_group_id
   db_secret_id = module.secretsmanager.db_secret_id
   availability_zone = module.networking.subnet_a_availability_zone
+  
+  # Lambda variables
+  db_secret_arn = module.secretsmanager.db_secret_arn
+  db_secret_name = module.secretsmanager.db_secret_name
+  private_subnet_b_id = module.networking.private_subnet_b_id
+  lambda_security_group_id = module.networking.lambda_security_group_id
 
   depends_on = [ module.storage, module.secretsmanager, module.networking ]
 }

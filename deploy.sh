@@ -75,28 +75,50 @@ fi
 echo -e "${GREEN}✅ Infrastructure deployed successfully${NC}"
 echo -e "${GREEN}   Database connection info retrieved${NC}"
 
-# Step 2: Apply database schema using Python
+# Step 2: Deploy database schema using Lambda
 echo -e "${YELLOW}🗄️  Step 2: Creating database schema...${NC}"
 
-# Set environment variables for Python script
-export DB_HOST="$DB_HOST"
-export DB_PORT="$DB_PORT"
-export DB_NAME="$DB_NAME"
-export DB_USER="$TF_VAR_data_db_username"
-export DB_PASSWORD="$TF_VAR_data_db_password"
+# Get Lambda function name from Terraform output
+LAMBDA_FUNCTION_NAME=$(terraform output -raw lambda_function_name 2>/dev/null || echo "")
 
-# Run Python schema deployment script
-echo -e "${YELLOW}📝 Applying database schema...${NC}"
-cd ..  # Go back to project root for Python script
+if [ -z "$LAMBDA_FUNCTION_NAME" ]; then
+    echo -e "${RED}❌ Could not get Lambda function name from Terraform outputs${NC}"
+    echo -e "${YELLOW}💡 Available outputs:${NC}"
+    terraform output
+    exit 1
+fi
 
-if [ -f "src/db/deploy_schema.py" ]; then
-    python src/db/deploy_schema.py
-    echo -e "${GREEN}✅ Database schema applied successfully${NC}"
+echo -e "${YELLOW}📝 Invoking Lambda function for schema deployment...${NC}"
+echo -e "${YELLOW}   Function: $LAMBDA_FUNCTION_NAME${NC}"
+
+# Invoke Lambda function
+LAMBDA_RESULT=$(aws lambda invoke \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --payload '{}' \
+    --output text \
+    --query 'StatusCode' \
+    /tmp/lambda_response.json 2>/dev/null)
+
+if [ "$LAMBDA_RESULT" = "200" ]; then
+    echo -e "${GREEN}✅ Lambda invocation successful${NC}"
+    
+    # Show Lambda response
+    if [ -f "/tmp/lambda_response.json" ]; then
+        echo -e "${YELLOW}📄 Lambda response:${NC}"
+        cat /tmp/lambda_response.json | jq '.' 2>/dev/null || cat /tmp/lambda_response.json
+        rm -f /tmp/lambda_response.json
+    fi
+    
+    echo -e "${GREEN}✅ Database schema deployed successfully via Lambda${NC}"
 else
-    echo -e "${RED}❌ Schema deployment script not found at src/db/deploy_schema.py${NC}"
-    echo -e "${YELLOW}💡 Current directory: $(pwd)${NC}"
-    echo -e "${YELLOW}💡 Looking for: src/db/deploy_schema.py${NC}"
-    ls -la src/db/ 2>/dev/null || echo -e "${YELLOW}💡 src/db/ directory not found${NC}"
+    echo -e "${RED}❌ Lambda invocation failed with status: $LAMBDA_RESULT${NC}"
+    
+    if [ -f "/tmp/lambda_response.json" ]; then
+        echo -e "${YELLOW}� Lambda error response:${NC}"
+        cat /tmp/lambda_response.json
+        rm -f /tmp/lambda_response.json
+    fi
+    
     exit 1
 fi
 
