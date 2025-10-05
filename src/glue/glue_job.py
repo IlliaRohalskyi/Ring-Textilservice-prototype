@@ -7,7 +7,7 @@ from awsglue.job import Job
 from awsglue import DynamicFrame
 import pandas as pd
 from pyspark.sql.types import *
-from pyspark.sql.functions import col, lit, to_date, when, regexp_replace
+from pyspark.sql.functions import col as F_col, lit, to_date, when, regexp_replace, regexp_extract, split, expr, concat_ws, lpad, concat
 from awsglue.dynamicframe import DynamicFrame
 from pyspark.sql import functions as SqlFuncs
 from urllib.parse import unquote
@@ -46,9 +46,59 @@ excel_schema = StructType([StructField(column_name, StringType(), True) for colu
 spark_df = spark.createDataFrame(excel_df, schema=excel_schema)
 print("✅ Converted to Spark DataFrame")
 
-# Process date column
-spark_df = spark_df.withColumn("date", to_date(col("Datum"), "dd.MM.yyyy"))
-print("✅ Date column processed")
+# Process date column - handle datetime objects and strings from Excel
+try:
+    # Handle different date formats:
+    # 1. For datetime objects (converted to Java Calendar strings by Spark)
+    # 2. For string values like "Werte aus KW1 2024"
+    
+    # Extract date from Java Calendar format (for datetime objects)
+    spark_df = spark_df.withColumn("java_year", 
+        regexp_extract(F_col("Datum"), r"YEAR=(\d{4})", 1))
+    spark_df = spark_df.withColumn("java_month", 
+        regexp_extract(F_col("Datum"), r"MONTH=(\d+)", 1))
+    spark_df = spark_df.withColumn("java_day", 
+        regexp_extract(F_col("Datum"), r"DAY_OF_MONTH=(\d+)", 1))
+    
+    # Create date from Java Calendar parts (month is 0-based in Java Calendar, so add 1)
+    spark_df = spark_df.withColumn("java_month_adj", 
+        when(F_col("java_month") != "", F_col("java_month").cast("int") + 1).otherwise(None))
+    
+    spark_df = spark_df.withColumn("date_string", 
+        when((F_col("java_year") != "") & (F_col("java_month") != "") & (F_col("java_day") != ""),
+             concat(F_col("java_year"), lit("-"), 
+                   lpad(F_col("java_month_adj").cast("string"), 2, "0"), lit("-"),
+                   lpad(F_col("java_day"), 2, "0"))
+        ).otherwise(None))
+    
+    spark_df = spark_df.withColumn("date_from_java", 
+        to_date(F_col("date_string"), "yyyy-MM-dd"))
+    
+    # Try to parse as regular date strings (MM/dd/yyyy format)
+    spark_df = spark_df.withColumn("date_from_string", 
+        to_date(F_col("Datum"), "MM/dd/yyyy"))
+    
+    # Use the first successful date parsing
+    spark_df = spark_df.withColumn("date", 
+        when(F_col("date_from_java").isNotNull(), F_col("date_from_java"))
+        .when(F_col("date_from_string").isNotNull(), F_col("date_from_string"))
+        .otherwise(None))
+    
+    # Clean up temporary columns
+    spark_df = spark_df.drop("java_year", "java_month", "java_day", "java_month_adj", "date_string", "date_from_java", "date_from_string")
+    
+    print("✅ Date column processed with datetime and string handling")
+    
+    # Count valid dates
+    valid_date_count = spark_df.filter(F_col("date").isNotNull()).count()
+    total_count = spark_df.count()
+    print(f"📊 Valid dates: {valid_date_count}/{total_count}")
+    
+except Exception as e:
+    print(f"❌ Error processing date column: {e}")
+    print("⚠️ Continuing without date filtering...")
+    # If date parsing fails completely, create a dummy date column and continue
+    spark_df = spark_df.withColumn("date", lit(None).cast("date"))
 
 # Define target table schemas matching the database
 target_schemas = [
@@ -178,19 +228,22 @@ for schema_obj in target_schemas:
     
     # Map and cast columns for this table
     selected_cols = []
+    found_columns = 0
     for db_col, data_type in schema.items():
         excel_col = column_mapping.get(db_col)
         
         if excel_col and excel_col in spark_df.columns:
             # Cast the column to appropriate type
             if data_type == "int":
-                col_expr = col(excel_col).cast(IntegerType()).alias(db_col)
+                col_expr = F_col(excel_col).cast(IntegerType()).alias(db_col)
             elif data_type == "double": 
-                col_expr = col(excel_col).cast(DoubleType()).alias(db_col)
+                col_expr = F_col(excel_col).cast(DoubleType()).alias(db_col)
             elif data_type == "date":
-                col_expr = col(excel_col).alias(db_col)
+                col_expr = F_col(excel_col).alias(db_col)
             else:
-                col_expr = col(excel_col).cast(StringType()).alias(db_col)
+                col_expr = F_col(excel_col).cast(StringType()).alias(db_col)
+            found_columns += 1
+            print(f"  ✅ Found column '{excel_col}' -> {db_col}")
         else:
             # Create null column if mapping not found
             if data_type == "int":
@@ -201,22 +254,28 @@ for schema_obj in target_schemas:
                 col_expr = lit(None).cast(DateType()).alias(db_col)
             else:
                 col_expr = lit(None).cast(StringType()).alias(db_col)
+            print(f"  ❌ Missing column '{excel_col}' -> {db_col} (will be NULL)")
                 
         selected_cols.append(col_expr)
+    
+    print(f"📊 Column mapping for {table_name}: {found_columns}/{len(schema)} columns found")
     
     # Create DataFrame for this table
     df_table = spark_df.select(*selected_cols)
     
-    # Filter out rows with null dates
-    df_table = df_table.filter(col("date").isNotNull())
+    # Filter out rows with null dates (but be more lenient)
+    initial_count = df_table.count()
+    df_table = df_table.filter(F_col("date").isNotNull())
+    filtered_count = df_table.count()
+    print(f"  📊 Rows after date filtering: {filtered_count}/{initial_count} (removed {initial_count - filtered_count} rows with invalid dates)")
     
     # Drop duplicates for this table
     df_table = df_table.dropDuplicates()
     
     # Convert Spark DataFrame to Glue DynamicFrame for JDBC operations
     dynamic_frame = DynamicFrame.fromDF(df_table, glueContext, f"{staging_table_name}_frame")
-    
-    # Write to staging table (will overwrite existing data)
+
+    # Write to staging table
     print(f"🔄 Writing {df_table.count()} rows to staging table {staging_table_name}...")
     
     glueContext.write_dynamic_frame.from_jdbc_conf(

@@ -239,7 +239,7 @@ DECLARE
 BEGIN
     INSERT INTO overview (date, tonage, water_m3, liters_per_kg, electricity_per_kg, 
                          gas_per_kg, gas_plus_elec_per_kg, hours_production, kg_per_hour)
-    SELECT date, tonage, water_m3, liters_per_kg, electricity_per_kg, 
+    SELECT DISTINCT date, tonage, water_m3, liters_per_kg, electricity_per_kg, 
            gas_per_kg, gas_plus_elec_per_kg, hours_production, kg_per_hour
     FROM overview_staging
     ON CONFLICT (date) DO UPDATE SET
@@ -264,7 +264,7 @@ DECLARE
     rows_affected INTEGER;
 BEGIN
     INSERT INTO fleet (date, driving_hours, kg_per_hour_driving, km_driven)
-    SELECT date, driving_hours, kg_per_hour_driving, km_driven
+    SELECT DISTINCT date, driving_hours, kg_per_hour_driving, km_driven
     FROM fleet_staging
     ON CONFLICT (date) DO UPDATE SET
         driving_hours = EXCLUDED.driving_hours,
@@ -286,7 +286,7 @@ BEGIN
                                  machine_85kg_middle, steps_85kg_middle, machine_85kg_right,
                                  steps_85kg_right, electrolux, avg_load_130kg, 
                                  avg_load_85kg_middle, avg_load_85kg_right)
-    SELECT date, machine_130kg, steps_130kg, machine_85kg_plus_85kg,
+    SELECT DISTINCT date, machine_130kg, steps_130kg, machine_85kg_plus_85kg,
            machine_85kg_middle, steps_85kg_middle, machine_85kg_right,
            steps_85kg_right, electrolux, avg_load_130kg, 
            avg_load_85kg_middle, avg_load_85kg_right
@@ -319,7 +319,7 @@ BEGIN
                        terry_prep_1, terry_prep_2, terry_prep_3, terry_prep_4,
                        blankets_1, blankets_2, sum_drying_load, steps_total,
                        kipper, avg_drying_load, sum_drying, steps)
-    SELECT date, roboter_1, roboter_2, roboter_3, roboter_4,
+    SELECT DISTINCT date, roboter_1, roboter_2, roboter_3, roboter_4,
            terry_prep_1, terry_prep_2, terry_prep_3, terry_prep_4,
            blankets_1, blankets_2, sum_drying_load, steps_total,
            kipper, avg_drying_load, sum_drying, steps

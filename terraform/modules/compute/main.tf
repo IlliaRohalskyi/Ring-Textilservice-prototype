@@ -361,8 +361,118 @@ resource "aws_lambda_function" "deploy_schema" {
   }
 }
 
-# CloudWatch Log Group for Lambda
+# CloudWatch Log Group for Schema Deploy Lambda
 resource "aws_cloudwatch_log_group" "deploy_schema_logs" {
   name              = "/aws/lambda/${aws_lambda_function.deploy_schema.function_name}"
+  retention_in_days = 14
+}
+
+# =============================================================================
+# UPSERT LAMBDA FUNCTION
+# =============================================================================
+
+# Package Upsert Lambda function
+data "archive_file" "upsert_lambda" {
+  type        = "zip"
+  source_file = "${path.module}/../../../src/lambda/upsert_data.py"
+  output_path = "${path.module}/../../../src/lambda/upsert_data.zip"
+}
+
+# IAM role for Upsert Lambda
+resource "aws_iam_role" "upsert_lambda_role" {
+  name = "${var.project_name}-lambda-upsert-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM policy for Upsert Lambda
+resource "aws_iam_role_policy" "upsert_lambda_policy" {
+  name = "${var.project_name}-lambda-upsert-policy"
+  role = aws_iam_role.upsert_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:AttachNetworkInterface",
+          "ec2:DetachNetworkInterface"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.db_secret_arn
+      }
+    ]
+  })
+}
+
+# Attach VPC execution role policy for Upsert Lambda
+resource "aws_iam_role_policy_attachment" "upsert_lambda_vpc_execution" {
+  role       = aws_iam_role.upsert_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Upsert Lambda function
+resource "aws_lambda_function" "upsert_data" {
+  filename         = data.archive_file.upsert_lambda.output_path
+  function_name    = "${var.project_name}-upsert-data"
+  role            = aws_iam_role.upsert_lambda_role.arn
+  handler         = "upsert_data.lambda_handler"
+  runtime         = "python3.9"
+  timeout         = 300
+  memory_size     = 256
+  
+  source_code_hash = data.archive_file.upsert_lambda.output_base64sha256
+  
+  layers = [aws_lambda_layer_version.psycopg2_layer.arn]
+  
+  vpc_config {
+    subnet_ids         = [var.vpc_subnet_id, var.private_subnet_b_id]
+    security_group_ids = [var.lambda_security_group_id]
+  }
+  
+  environment {
+    variables = {
+      SECRET_NAME = var.db_secret_name
+    }
+  }
+  
+  tags = {
+    Name = "${var.project_name}-upsert-data"
+  }
+}
+
+# CloudWatch Log Group for Upsert Lambda
+resource "aws_cloudwatch_log_group" "upsert_data_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.upsert_data.function_name}"
   retention_in_days = 14
 }

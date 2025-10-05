@@ -78,6 +78,7 @@ module "step_functions" {
   project_name = var.project_name
   aws_region   = var.aws_region
   glue_job_name = module.compute.glue_job_name
+  upsert_lambda_arn = module.compute.upsert_lambda_arn
 
   depends_on = [ module.compute ]
 }

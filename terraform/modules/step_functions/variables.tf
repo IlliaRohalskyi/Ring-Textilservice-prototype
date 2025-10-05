@@ -12,3 +12,8 @@ variable "glue_job_name" {
   description = "Name of the Glue job to execute"
   type        = string
 }
+
+variable "upsert_lambda_arn" {
+  description = "ARN of the upsert Lambda function"
+  type        = string
+}

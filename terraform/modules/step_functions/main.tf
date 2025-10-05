@@ -37,6 +37,13 @@ resource "aws_iam_role_policy" "step_function_policy" {
       {
         Effect = "Allow"
         Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = var.upsert_lambda_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogDelivery",
           "logs:GetLogDelivery",
           "logs:UpdateLogDelivery",
@@ -82,7 +89,7 @@ resource "aws_sfn_state_machine" "data_processing_workflow" {
             "--s3_input_path.$" = "$.s3_input_path"
           }
         }
-        Next = "JobSucceeded"
+        Next = "UpsertData"
         Catch = [
           {
             ErrorEquals = ["States.TaskFailed", "States.Timeout"]
@@ -94,6 +101,32 @@ resource "aws_sfn_state_machine" "data_processing_workflow" {
           {
             ErrorEquals     = ["States.TaskFailed"]
             IntervalSeconds = 30
+            MaxAttempts     = 2
+            BackoffRate     = 2.0
+          }
+        ]
+      }
+      UpsertData = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = var.upsert_lambda_arn
+          Payload = {
+            "source" = "step-function"
+          }
+        }
+        Next = "JobSucceeded"
+        Catch = [
+          {
+            ErrorEquals = ["States.TaskFailed", "States.Timeout"]
+            Next        = "JobFailed"
+            ResultPath  = "$.upsert_error"
+          }
+        ]
+        Retry = [
+          {
+            ErrorEquals     = ["States.TaskFailed"]
+            IntervalSeconds = 10
             MaxAttempts     = 2
             BackoffRate     = 2.0
           }

@@ -17,3 +17,13 @@ output "psycopg2_layer_arn" {
   description = "ARN of the psycopg2 Lambda layer"
   value       = aws_lambda_layer_version.psycopg2_layer.arn
 }
+
+output "upsert_lambda_arn" {
+  description = "ARN of the upsert Lambda function"
+  value       = aws_lambda_function.upsert_data.arn
+}
+
+output "upsert_lambda_name" {
+  description = "Name of the upsert Lambda function"
+  value       = aws_lambda_function.upsert_data.function_name
+}
