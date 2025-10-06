@@ -341,3 +341,44 @@ resource "aws_vpc_endpoint" "secretsmanager" {
     Name = "${var.project_name}-secretsmanager-endpoint"
   }
 }
+
+# Security Group for QuickSight to access RDS
+resource "aws_security_group" "quicksight_sg" {
+  name_prefix = "${var.project_name}-quicksight-sg"
+  vpc_id      = aws_vpc.main_vpc.id
+  description = "Security group for QuickSight to access RDS PostgreSQL"
+
+  # Outbound rule to connect to PostgreSQL
+  egress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]  # VPC CIDR
+    description = "Allow QuickSight to connect to PostgreSQL RDS"
+  }
+
+  # Allow HTTPS for QuickSight service communication
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS outbound for QuickSight service"
+  }
+
+  tags = {
+    Name = "${var.project_name}-quicksight-sg"
+    Purpose = "QuickSight database access"
+  }
+}
+
+# Add rule to RDS security group to allow QuickSight access
+resource "aws_security_group_rule" "rds_allow_quicksight" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.quicksight_sg.id
+  security_group_id        = aws_security_group.rds_sg.id
+  description              = "Allow QuickSight access to RDS PostgreSQL"
+}

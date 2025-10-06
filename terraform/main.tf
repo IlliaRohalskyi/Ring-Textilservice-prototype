@@ -91,3 +91,21 @@ module "step_functions" {
 
   depends_on = [ module.networking, module.step_functions ]
 }
+
+module "quicksight" {
+  source = "./modules/quicksight"
+  
+  project_name                  = var.project_name
+  aws_account_id               = var.aws_account_id
+  aws_region                   = var.aws_region
+  quicksight_security_group_id = module.networking.quicksight_security_group_id
+  
+  # Database connection details
+  db_host     = module.storage.db_host
+  db_port     = module.storage.db_port
+  db_name     = module.storage.db_name
+  db_username = var.data_db_username
+  db_password = var.data_db_password
+
+  depends_on = [module.storage, module.networking]
+}
