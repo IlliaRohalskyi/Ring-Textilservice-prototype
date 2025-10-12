@@ -101,11 +101,12 @@ module "quicksight" {
   quicksight_security_group_id = module.networking.quicksight_security_group_id
   
   # Database connection details
-  db_host     = module.storage.db_host
-  db_port     = module.storage.db_port
-  db_name     = module.storage.db_name
-  db_username = var.data_db_username
-  db_password = var.data_db_password
+  db_host       = module.storage.db_host
+  db_port       = module.storage.db_port
+  db_name       = module.storage.db_name
+  db_username   = var.data_db_username
+  db_password   = var.data_db_password
+  db_secret_arn = module.secretsmanager.db_secret_arn
 
-  depends_on = [module.storage, module.networking]
+  depends_on = [module.storage, module.networking, module.secretsmanager]
 }

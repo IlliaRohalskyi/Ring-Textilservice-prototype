@@ -44,3 +44,8 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "db_secret_arn" {
+  description = "ARN of the main database secret (from secretsmanager module)"
+  type        = string
+}

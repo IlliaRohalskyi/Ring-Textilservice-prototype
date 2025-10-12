@@ -8,16 +8,6 @@ output "quicksight_vpc_role_name" {
   value       = aws_iam_role.quicksight_vpc_role.name
 }
 
-output "quicksight_db_secret_arn" {
-  description = "ARN of the Secrets Manager secret for QuickSight database access"
-  value       = aws_secretsmanager_secret.quicksight_db_secret.arn
-}
-
-output "quicksight_db_secret_name" {
-  description = "Name of the Secrets Manager secret for QuickSight database access"
-  value       = aws_secretsmanager_secret.quicksight_db_secret.name
-}
-
 output "database_connection_info" {
   description = "Database connection information for manual QuickSight setup"
   value = {

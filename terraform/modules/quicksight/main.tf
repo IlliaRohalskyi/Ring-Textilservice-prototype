@@ -65,29 +65,9 @@ resource "aws_iam_role_policy_attachment" "quicksight_vpc_policy_attachment" {
   policy_arn = aws_iam_policy.quicksight_vpc_policy.arn
 }
 
-# Secrets Manager secret for QuickSight database credentials
-resource "aws_secretsmanager_secret" "quicksight_db_secret" {
-  name        = "${var.project_name}-quicksight-db-credentials"
-  description = "Database credentials for QuickSight access to Ring Textilservice DB"
 
-  tags = {
-    Name = "${var.project_name}-quicksight-db-secret"
-    Purpose = "QuickSight database authentication"
-  }
-}
 
-resource "aws_secretsmanager_secret_version" "quicksight_db_secret_version" {
-  secret_id = aws_secretsmanager_secret.quicksight_db_secret.id
-  secret_string = jsonencode({
-    username = var.db_username
-    password = var.db_password
-    host     = var.db_host
-    port     = var.db_port
-    database = var.db_name
-  })
-}
-
-# IAM policy for QuickSight to access its dedicated secret
+# IAM policy for QuickSight to access the main database secret
 resource "aws_iam_policy" "quicksight_secrets_policy" {
   name        = "${var.project_name}-quicksight-secrets-policy"
   description = "Policy for QuickSight to access database credentials"
@@ -101,7 +81,7 @@ resource "aws_iam_policy" "quicksight_secrets_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = aws_secretsmanager_secret.quicksight_db_secret.arn
+        Resource = var.db_secret_arn
       }
     ]
   })

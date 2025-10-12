@@ -37,9 +37,10 @@ output "quicksight_security_group_id" {
   value       = module.networking.quicksight_security_group_id
 }
 
-output "quicksight_db_secret_name" {
-  description = "Name of the Secrets Manager secret for QuickSight database credentials"
-  value       = module.quicksight.quicksight_db_secret_name
+output "main_db_secret_name" {
+  description = "Name of the main database secret (used by Lambda and QuickSight)"
+  value       = module.secretsmanager.db_secret_name
+  sensitive   = true
 }
 
 output "quicksight_subnet_ids" {
